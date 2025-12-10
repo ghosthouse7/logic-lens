@@ -1,53 +1,49 @@
 :root {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace; /* Hacker Font */
   line-height: 1.5;
-  font-weight: 400;
   color-scheme: dark;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
-  /* Cool Dark Gradient Background */
-  background: radial-gradient(circle at top left, #1e1b4b, #0f172a);
   color: #e2e8f0;
+  /* COOL ANIMATED BACKGROUND */
+  background: linear-gradient(-45deg, #0f172a, #1e1b4b, #312e81, #0f172a);
+  background-size: 400% 400%;
+  animation: gradientBG 15s ease infinite;
 }
 
-/* Scrollbar Design */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #0f172a; 
-}
-::-webkit-scrollbar-thumb {
-  background: #38bdf8; 
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #0ea5e9; 
+@keyframes gradientBG {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
-/* Glassmorphism Effect for Cards */
+/* Glass Card with Neon Glow */
 .glass-card {
-  background: rgba(30, 41, 59, 0.7);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.1);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
 }
 
-/* Glowing Button Animation */
-@keyframes pulse-glow {
-  0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); }
-  70% { box-shadow: 0 0 0 10px rgba(56, 189, 248, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+.glass-card:hover {
+  border-color: rgba(56, 189, 248, 0.3);
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.1);
 }
 
-.glow-button:not(:disabled):hover {
-  animation: pulse-glow 1.5s infinite;
-  transform: translateY(-2px);
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #020617; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* Mermaid Diagram Text Fix */
+.mermaid text { fill: #e2e8f0 !important; font-family: monospace !important; }
+.mermaid .node rect, .mermaid .node circle, .mermaid .node polygon {
+  stroke: #38bdf8 !important; fill: #1e293b !important; stroke-width: 2px;
 }
+.mermaid .edgePath .path { stroke: #94a3b8 !important; stroke-width: 2px; }

@@ -1,67 +1,145 @@
-import { useState, useEffect } from 'react'
-import { Code2, Play, GitGraph, Loader2, Zap, LayoutTemplate, Clock, Database, Flame, Languages, Lightbulb, Maximize2, X } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Code2, Play, GitGraph, Loader2, Zap, LayoutTemplate, Clock, Database, Flame, Languages, Lightbulb, Maximize2, X, Wand2, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import mermaid from 'mermaid'
 
 mermaid.initialize({ 
   startOnLoad: true,
-  theme: 'dark',
+  theme: 'base',
   securityLevel: 'loose',
+  flowchart: { curve: 'basis', padding: 20 },
+  themeVariables: {
+    primaryColor: '#1e293b',
+    primaryTextColor: '#e2e8f0',
+    primaryBorderColor: '#38bdf8',
+    lineColor: '#94a3b8',
+    secondaryColor: '#0f172a',
+    tertiaryColor: '#1e1b4b'
+  }
 })
 
 function App() {
   const [inputCode, setInputCode] = useState('')
   const [diagramCode, setDiagramCode] = useState('')
   const [language, setLanguage] = useState('English') 
-  const [analysis, setAnalysis] = useState({ time: '', space: '', roast: '', hint: '' }) 
+  const [analysis, setAnalysis] = useState({ time: '', space: '', roast: '', hint: '', fixedCode: '' }) 
   const [loading, setLoading] = useState(false)
   const [isFullScreen, setIsFullScreen] = useState(false)
+  const [errorMsg, setErrorMsg] = useState('') 
+  const [showSuccess, setShowSuccess] = useState(false)
+  const mermaidRef = useRef(null)
+  const modalRef = useRef(null)
+
+  // 1. SAFE GRAPH GENERATOR (The Steel Wall)
+  const generateSafeFlowchart = (steps) => {
+    if (!steps || !Array.isArray(steps) || steps.length === 0) return 'graph TD\nError["No Logic Found"]';
+    
+    let chart = 'graph TD\n';
+    chart += `Start([Start]) --> ${sanitizeId(steps[0].id)}\n`; 
+
+    steps.forEach((step, index) => {
+      // SANITIZE EVERYTHING
+      const cleanLabel = step.label ? step.label.replace(/["(){}<>]/g, "'") : "Step";
+      const safeId = sanitizeId(step.id);
+      
+      let shapeNode = '';
+      if (step.type === 'decision') {
+        shapeNode = `${safeId}{"${cleanLabel}?"}`; 
+      } else if (step.type === 'io') {
+        shapeNode = `${safeId}[/"${cleanLabel}"/]`; 
+      } else {
+        shapeNode = `${safeId}["${cleanLabel}"]`; 
+      }
+
+      if (index < steps.length - 1) {
+        const nextId = sanitizeId(steps[index + 1].id);
+        chart += `${shapeNode} --> ${nextId}\n`;
+      } else {
+        chart += `${shapeNode} --> End([End])\n`;
+      }
+    });
+
+    return chart;
+  }
+
+  // HELPER: Removes spaces and weird chars from IDs
+  const sanitizeId = (id) => {
+    if (!id) return "NodeX";
+    return id.replace(/[^a-zA-Z0-9]/g, ''); 
+  }
+
+  // RENDER ENGINE
+  const renderMermaid = async () => {
+    if (diagramCode && mermaidRef.current) {
+      try {
+        mermaidRef.current.removeAttribute('data-processed');
+        mermaidRef.current.innerHTML = diagramCode; 
+        await mermaid.run({ nodes: [mermaidRef.current] }); 
+        setErrorMsg('');
+      } catch (e) {
+        console.error("Mermaid Render Fail:", e);
+        setErrorMsg("⚠️ Graph too complex. Analysis below is correct.");
+        mermaidRef.current.innerHTML = '';
+      }
+    }
+    if (isFullScreen && diagramCode && modalRef.current) {
+        try {
+            modalRef.current.removeAttribute('data-processed');
+            modalRef.current.innerHTML = diagramCode;
+            await mermaid.run({ nodes: [modalRef.current] });
+        } catch(e) { console.log("Modal render error", e) }
+    }
+  };
 
   useEffect(() => {
-    if (diagramCode) {
-      setTimeout(() => {
-        mermaid.contentLoaded()
-      }, 100)
-    }
-  }, [diagramCode, isFullScreen])
+    setTimeout(renderMermaid, 200);
+  }, [diagramCode, isFullScreen]);
 
-  const handleVisualize = async () => {
-    if (!inputCode) return alert("Please enter some code first!")
+  // MAIN LOGIC
+  const handleVisualize = async (codeToUse = inputCode, langToUse = language) => {
+    if (!codeToUse.trim()) return alert("Please enter some code first!")
     
-    setLoading(true)
-    setDiagramCode('') 
-    setAnalysis({ time: '', space: '', roast: '', hint: '' })
-
+    setLoading(true);
+    setErrorMsg('');
+    
     const apiKey = import.meta.env.VITE_GROQ_API_KEY
-    if (!apiKey) return alert("API Key missing! Check .env file")
-
-    // DYNAMIC PROMPT GENERATION (Fixes the confusion)
-    let roastInstruction = `A short, sarcastic, funny roast about the code quality in ${language}.`
-    
-    if (language.includes("Bengali") || language.includes("Hindi")) {
-      roastInstruction += " IMPORTANT: Output in 'ROMANIZED' English text (e.g. 'Tor matha kharap'). Do NOT use native script."
-    } else if (language === "Shakespearean") {
-      roastInstruction += " Use Old English style (Thou, art, doth, verily, zounds). Be dramatic."
-    } else if (language === "Pirate") {
-      roastInstruction += " Use Pirate slang (Ahoy, matey, walk the plank). Be aggressive."
-    } else if (language === "GenZ Slang") {
-      roastInstruction += " Use GenZ brainrot slang (fr, no cap, skibidi, cringe, L code). Be trendy."
+    if (!apiKey) {
+      setLoading(false);
+      return alert("Missing API Key! Check .env file");
     }
 
-    const prompt = `
-      You are a Senior Software Architect and a strict mentor.
-      Analyze the user's code. Return a JSON object with 5 fields:
-      1. "graph": Mermaid.js code (start with "graph TD").
-      2. "timeComplexity": The Big O time complexity (e.g., "O(n)").
-      3. "spaceComplexity": The Big O space complexity (e.g., "O(1)").
-      4. "roast": ${roastInstruction}
-      5. "hint": A specific, technical suggestion to OPTIMIZE the code. Keep this helpful and serious in English.
+    let roastInstruction = `A funny roast in ${langToUse}.`
+    if (langToUse !== "English") {
+      roastInstruction += " CRITICAL: Output in ROMANIZED English alphabets only. NO NATIVE SCRIPTS."
+    }
 
-      RULES:
-      - Return ONLY raw JSON. No markdown.
-      - Diagram nodes must be short.
+    // 2. PROMPT: Force Clean Data
+    const prompt = `
+      You are an elite AI. Analyze the code. Return a strictly valid JSON.
       
+      INSTEAD OF GRAPH CODE, RETURN A LIST OF STEPS.
+      "steps": [
+        {"id": "s1", "type": "io", "label": "Read input"},
+        {"id": "s2", "type": "decision", "label": "Is n less than 0"},
+        {"id": "s3", "type": "process", "label": "Calc result"}
+      ]
+      
+      RULES:
+      - "type" MUST be 'process', 'decision', or 'io'.
+      - "label" MUST be simple English (Max 6 words). NO CODE SYMBOLS (like <, >, {).
+      - "id" must be simple (s1, s2).
+      
+      JSON OUTPUT FORMAT:
+      {
+        "steps": [],
+        "timeComplexity": "Big O",
+        "spaceComplexity": "Big O",
+        "roast": "${roastInstruction}",
+        "hint": "Optimization tip",
+        "fixedCode": "Refactored optimized code. IF CODE IS ALREADY GOOD, RETURN THE ORIGINAL CODE. DO NOT RETURN NULL."
+      }
+
       USER CODE:
-      ${inputCode}
+      ${codeToUse}
     `
 
     try {
@@ -74,27 +152,55 @@ function App() {
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile", 
           messages: [{ role: "user", content: prompt }],
-          temperature: 0.2, 
+          temperature: 0.1, 
           response_format: { type: "json_object" }
         })
       });
 
       const data = await response.json()
-      const content = JSON.parse(data.choices[0].message.content)
+      if (data.error) throw new Error(data.error.message);
 
-      setDiagramCode(content.graph)
+      const content = JSON.parse(data.choices[0].message.content)
+      const safeGraph = generateSafeFlowchart(content.steps);
+
+      setDiagramCode(safeGraph)
       setAnalysis({
         time: content.timeComplexity,
         space: content.spaceComplexity,
         roast: content.roast,
-        hint: content.hint 
+        hint: content.hint,
+        fixedCode: content.fixedCode || codeToUse
       })
 
     } catch (error) {
-      console.error("Error:", error)
-      alert(`Failed: ${error.message}`)
+      console.error("API Error:", error)
+      setErrorMsg(`Agent Disconnected: ${error.message}`)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const isFirstRun = useRef(true);
+  useEffect(() => {
+    if (isFirstRun.current) {
+      isFirstRun.current = false;
+      return;
+    }
+    if (inputCode && !loading) {
+        handleVisualize(inputCode, language);
+    }
+  }, [language]);
+
+  const applyFix = () => {
+    if (analysis.fixedCode && analysis.fixedCode !== "null") {
+      const newCode = analysis.fixedCode;
+      setInputCode(newCode); 
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 3000);
+      setAnalysis(prev => ({ ...prev, fixedCode: null })); 
+      handleVisualize(newCode, language); 
+    } else {
+        alert("Code is already optimal!");
     }
   }
 
@@ -104,31 +210,29 @@ function App() {
       {/* HEADER */}
       <header className="glass-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 30px', borderRadius: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <div style={{ background: 'rgba(56, 189, 248, 0.1)', padding: '10px', borderRadius: '12px' }}>
+          <div style={{ background: 'rgba(56, 189, 248, 0.2)', padding: '10px', borderRadius: '12px', boxShadow: '0 0 10px rgba(56,189,248,0.3)' }}>
             <GitGraph color="#38bdf8" size={32} />
           </div>
           <div>
-            <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#f8fafc', fontWeight: '800', letterSpacing: '-0.5px' }}>
+            <h1 style={{ margin: 0, fontSize: '1.8rem', color: '#f8fafc', fontWeight: '800', letterSpacing: '-1px', textShadow: '0 0 20px rgba(56,189,248,0.5)' }}>
               Logic<span style={{ color: '#38bdf8' }}>Lens</span>
             </h1>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Zap size={14} color="#eab308" fill="#eab308" /> AI-Powered Code Mentor
+            <p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              <Zap size={12} color="#eab308" /> AI-Powered Agent
             </p>
           </div>
         </div>
       </header>
 
-      {/* MAIN CONTENT AREA */}
+      {/* MAIN AREA */}
       <div style={{ display: 'flex', gap: '20px', flex: 1, overflow: 'hidden' }}>
         
-        {/* LEFT: CODE INPUT */}
+        {/* LEFT: CODE */}
         <div className="glass-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px', padding: '20px', borderRadius: '16px' }}>
-          
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '10px' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', color: '#38bdf8' }}>
-              <Code2 size={20} /> Source Code
+              <Code2 size={20} /> Input
             </span>
-            
             <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
               <Languages size={16} color="#94a3b8"/>
               <select 
@@ -142,74 +246,81 @@ function App() {
                 <option value="English">English</option>
                 <option value="Bengali">Bengali (Strict Dada)</option>
                 <option value="Hindi">Hindi (Roaster)</option>
-                <option value="Shakespearean">Shakespearean</option>
-                <option value="Pirate">Pirate Speak</option>
-                <option value="GenZ Slang">GenZ Slang</option>
+                <option value="Chinese">Chinese (Sarcastic)</option>
+                <option value="Japanese">Japanese (Anime)</option>
                 <option value="Spanish">Spanish</option>
-                <option value="French">French</option>
-                <option value="Japanese">Japanese</option>
+                <option value="GenZ Slang">GenZ Slang</option>
+                <option value="Pirate">Pirate Speak</option>
               </select>
             </div>
           </div>
-          
           <textarea
             value={inputCode}
             onChange={(e) => setInputCode(e.target.value)}
             placeholder="// Paste your code here..."
             style={{
-              flex: 1, backgroundColor: '#0f172a', color: '#f1f5f9',
+              flex: 1, backgroundColor: '#020617', color: '#f1f5f9',
               border: '1px solid #334155', borderRadius: '12px', padding: '20px',
-              fontFamily: "'Fira Code', monospace", fontSize: '14px', resize: 'none', outline: 'none'
+              fontFamily: "'Fira Code', monospace", fontSize: '14px', resize: 'none', outline: 'none',
+              boxShadow: 'inset 0 0 10px rgba(0,0,0,0.5)'
             }}
           />
-          
           <button 
-            onClick={handleVisualize}
+            onClick={() => handleVisualize(inputCode, language)}
             disabled={loading}
-            className="glow-button"
             style={{
-              backgroundColor: loading ? '#334155' : '#38bdf8',
-              color: loading ? '#94a3b8' : '#0f172a',
+              background: loading ? '#334155' : 'linear-gradient(90deg, #38bdf8, #818cf8)',
+              color: loading ? '#94a3b8' : '#fff',
               border: 'none', padding: '16px', borderRadius: '12px',
               fontWeight: '700', fontSize: '1rem', cursor: loading ? 'not-allowed' : 'pointer',
-              display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px'
-            }}>
+              display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px',
+              boxShadow: loading ? 'none' : '0 0 20px rgba(56, 189, 248, 0.4)',
+              transition: 'transform 0.2s'
+            }}
+          >
             {loading ? <Loader2 className="animate-spin" /> : <Play fill="currentColor" size={20} />} 
-            {loading ? "Analyze Logic..." : "Visualize & Optimize"}
+            {loading ? "Agent is Thinking..." : "Visualize & Analyze"}
           </button>
         </div>
 
         {/* RIGHT: OUTPUTS */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px' }}>
           
-          {/* FLOWCHART (Top Half) */}
+          {/* FLOWCHART */}
           <div className="glass-card" style={{ flex: 3, borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '10px', marginBottom: '10px' }}>
                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', color: '#10b981' }}>
                  <LayoutTemplate size={20} /> Flowchart
                </span>
-               {/* ZOOM BUTTON */}
-               {diagramCode && (
+               {diagramCode && !errorMsg && (
                  <button 
                    onClick={() => setIsFullScreen(true)}
                    style={{ background: 'transparent', border: 'none', color: '#38bdf8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
-                   title="View Full Screen"
                  >
                    <Maximize2 size={18} /> <span style={{fontSize: '0.8rem'}}>Expand</span>
                  </button>
                )}
              </div>
-             
-             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', overflow: 'auto', background: '#0f172a', borderRadius: '12px' }}>
-               {diagramCode ? (
-                 <div className="mermaid" style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', padding: '20px' }}>{diagramCode}</div>
+             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', overflow: 'auto', background: '#020617', borderRadius: '12px', border: '1px solid #1e293b', padding: '10px' }}>
+               {errorMsg ? (
+                 <div style={{ color: '#ef4444', textAlign: 'center', padding: '20px' }}>
+                   <AlertTriangle size={48} style={{ margin: '0 auto 10px', display: 'block' }} />
+                   <p style={{ fontWeight: 'bold' }}>{errorMsg}</p>
+                   <button onClick={() => handleVisualize(inputCode, language)} style={{marginTop:'10px', padding:'5px 10px', background:'#334155', border:'none', color:'white', borderRadius:'5px', cursor:'pointer'}}>Retry</button>
+                 </div>
                ) : (
-                 <p style={{ opacity: 0.5 }}>Waiting for code...</p>
+                 <div ref={mermaidRef} className="mermaid" style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center' }}></div>
+               )}
+               {!diagramCode && !errorMsg && !loading && (
+                 <div style={{ textAlign: 'center', opacity: 0.5 }}>
+                    <Zap size={48} style={{ margin: '0 auto 10px', display: 'block', color: '#334155' }} />
+                    <p>Awaiting Code Input...</p>
+                 </div>
                )}
              </div>
           </div>
 
-          {/* METRICS ROW */}
+          {/* STATS */}
           <div style={{ display: 'flex', gap: '15px' }}>
              <div className="glass-card" style={{ flex: 1, borderRadius: '12px', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
                 <Clock size={18} color="#60a5fa" />
@@ -221,18 +332,32 @@ function App() {
              </div>
           </div>
 
-          {/* ROAST & HINT AREA (Bottom Half) */}
+          {/* AGENT & ROAST */}
           <div style={{ flex: 2, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {/* HINT CARD */}
             <div className="glass-card" style={{ flex: 1, borderRadius: '12px', padding: '15px', display: 'flex', flexDirection: 'column', background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', color: '#facc15' }}>
-                 <Lightbulb size={18} />
-                 <span style={{ fontWeight: 'bold', fontSize: '0.8rem', textTransform: 'uppercase' }}>Optimization Tip</span>
+               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '5px' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#facc15' }}>
+                   <Lightbulb size={18} />
+                   <span style={{ fontWeight: 'bold', fontSize: '0.8rem', textTransform: 'uppercase' }}>Agent Suggestion</span>
+                 </div>
+                 {analysis.fixedCode && analysis.fixedCode !== "null" && (
+                    <button 
+                      onClick={applyFix}
+                      style={{
+                        background: '#eab308', color: '#000', border: 'none', borderRadius: '4px',
+                        padding: '4px 10px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 0 10px rgba(234, 179, 8, 0.4)'
+                      }}
+                    >
+                      <Wand2 size={12} /> Auto-Fix Code
+                    </button>
+                 )}
                </div>
-               <p style={{ margin: 0, fontSize: '0.9rem', color: '#fef08a' }}>{analysis.hint || "Run code to get optimization tips..."}</p>
+               <p style={{ margin: 0, fontSize: '0.9rem', color: '#fef08a' }}>
+                 {showSuccess ? <span style={{display:'flex', alignItems:'center', gap:'5px', color:'#fff', fontWeight:'bold'}}><CheckCircle2 size={16}/> Code Updated!</span> : (analysis.hint || "Run code to get optimization tips...")}
+               </p>
             </div>
 
-            {/* ROAST CARD */}
             <div className="glass-card" style={{ flex: 1, borderRadius: '12px', padding: '15px', display: 'flex', flexDirection: 'column', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', color: '#f87171' }}>
                  <Flame size={18} />
@@ -247,7 +372,7 @@ function App() {
         </div>
       </div>
 
-      {/* FULL SCREEN MODAL */}
+      {/* MODAL */}
       {isFullScreen && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
@@ -262,9 +387,8 @@ function App() {
               <X size={24} />
             </button>
           </div>
-          <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'auto', background: '#0f172a', borderRadius: '16px', border: '1px solid #334155' }}>
-             <div className="mermaid" style={{ transform: 'scale(1.5)', transformOrigin: 'center' }}>
-               {diagramCode}
+          <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'auto', background: '#020617', borderRadius: '16px', border: '1px solid #334155' }}>
+             <div ref={(el) => { if(el) el.innerHTML = mermaidRef.current ? mermaidRef.current.innerHTML : ''; }} className="mermaid" style={{ transform: 'scale(1.5)', transformOrigin: 'center' }}>
              </div>
           </div>
         </div>
