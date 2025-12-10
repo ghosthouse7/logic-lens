@@ -27,44 +27,35 @@ function App() {
   const [errorMsg, setErrorMsg] = useState('') 
   const [showSuccess, setShowSuccess] = useState(false)
   const mermaidRef = useRef(null)
-  const modalRef = useRef(null)
+  const modalRef = useRef(null) 
 
-  // 1. SAFE GRAPH GENERATOR (The Steel Wall)
+  // 1. SAFE GRAPH GENERATOR
   const generateSafeFlowchart = (steps) => {
-    if (!steps || !Array.isArray(steps) || steps.length === 0) return 'graph TD\nError["No Logic Found"]';
+    if (!steps || !Array.isArray(steps)) return 'graph TD\nError["Analysis Failed"]';
     
     let chart = 'graph TD\n';
-    chart += `Start([Start]) --> ${sanitizeId(steps[0].id)}\n`; 
+    chart += `Start([Start]) --> ${steps[0].id}\n`; 
 
     steps.forEach((step, index) => {
-      // SANITIZE EVERYTHING
-      const cleanLabel = step.label ? step.label.replace(/["(){}<>]/g, "'") : "Step";
-      const safeId = sanitizeId(step.id);
+      const cleanLabel = step.label.replace(/["(){}<>]/g, "'");
       
       let shapeNode = '';
       if (step.type === 'decision') {
-        shapeNode = `${safeId}{"${cleanLabel}?"}`; 
+        shapeNode = `${step.id}{"${cleanLabel}?"}`; 
       } else if (step.type === 'io') {
-        shapeNode = `${safeId}[/"${cleanLabel}"/]`; 
+        shapeNode = `${step.id}[/"${cleanLabel}"/]`; 
       } else {
-        shapeNode = `${safeId}["${cleanLabel}"]`; 
+        shapeNode = `${step.id}["${cleanLabel}"]`; 
       }
 
       if (index < steps.length - 1) {
-        const nextId = sanitizeId(steps[index + 1].id);
-        chart += `${shapeNode} --> ${nextId}\n`;
+        chart += `${shapeNode} --> ${steps[index + 1].id}\n`;
       } else {
         chart += `${shapeNode} --> End([End])\n`;
       }
     });
 
     return chart;
-  }
-
-  // HELPER: Removes spaces and weird chars from IDs
-  const sanitizeId = (id) => {
-    if (!id) return "NodeX";
-    return id.replace(/[^a-zA-Z0-9]/g, ''); 
   }
 
   // RENDER ENGINE
@@ -77,8 +68,8 @@ function App() {
         setErrorMsg('');
       } catch (e) {
         console.error("Mermaid Render Fail:", e);
-        setErrorMsg("⚠️ Graph too complex. Analysis below is correct.");
-        mermaidRef.current.innerHTML = '';
+        setErrorMsg("⚠️ Diagram too complex for visualizer. Analysis below is correct.");
+        mermaidRef.current.innerHTML = ''; 
       }
     }
     if (isFullScreen && diagramCode && modalRef.current) {
@@ -112,21 +103,16 @@ function App() {
       roastInstruction += " CRITICAL: Output in ROMANIZED English alphabets only. NO NATIVE SCRIPTS."
     }
 
-    // 2. PROMPT: Force Clean Data
+    // 2. FIXED PROMPT
     const prompt = `
       You are an elite AI. Analyze the code. Return a strictly valid JSON.
       
       INSTEAD OF GRAPH CODE, RETURN A LIST OF STEPS.
       "steps": [
         {"id": "s1", "type": "io", "label": "Read input"},
-        {"id": "s2", "type": "decision", "label": "Is n less than 0"},
+        {"id": "s2", "type": "decision", "label": "Is n < 0"},
         {"id": "s3", "type": "process", "label": "Calc result"}
       ]
-      
-      RULES:
-      - "type" MUST be 'process', 'decision', or 'io'.
-      - "label" MUST be simple English (Max 6 words). NO CODE SYMBOLS (like <, >, {).
-      - "id" must be simple (s1, s2).
       
       JSON OUTPUT FORMAT:
       {
@@ -169,7 +155,7 @@ function App() {
         space: content.spaceComplexity,
         roast: content.roast,
         hint: content.hint,
-        fixedCode: content.fixedCode || codeToUse
+        fixedCode: content.fixedCode || codeToUse // Fallback
       })
 
     } catch (error) {
@@ -191,6 +177,7 @@ function App() {
     }
   }, [language]);
 
+  // FIX BUTTON LOGIC
   const applyFix = () => {
     if (analysis.fixedCode && analysis.fixedCode !== "null") {
       const newCode = analysis.fixedCode;
@@ -301,7 +288,9 @@ function App() {
                  </button>
                )}
              </div>
-             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#475569', overflow: 'auto', background: '#020617', borderRadius: '12px', border: '1px solid #1e293b', padding: '10px' }}>
+             
+             {/* THE FIX: align-items: flex-start ensures it starts at the TOP */}
+             <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflow: 'auto', background: '#020617', borderRadius: '12px', border: '1px solid #1e293b', padding: '20px' }}>
                {errorMsg ? (
                  <div style={{ color: '#ef4444', textAlign: 'center', padding: '20px' }}>
                    <AlertTriangle size={48} style={{ margin: '0 auto 10px', display: 'block' }} />
@@ -309,11 +298,11 @@ function App() {
                    <button onClick={() => handleVisualize(inputCode, language)} style={{marginTop:'10px', padding:'5px 10px', background:'#334155', border:'none', color:'white', borderRadius:'5px', cursor:'pointer'}}>Retry</button>
                  </div>
                ) : (
-                 <div ref={mermaidRef} className="mermaid" style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center' }}></div>
+                 <div ref={mermaidRef} className="mermaid" style={{ width: '100%' }}></div>
                )}
                {!diagramCode && !errorMsg && !loading && (
-                 <div style={{ textAlign: 'center', opacity: 0.5 }}>
-                    <Zap size={48} style={{ margin: '0 auto 10px', display: 'block', color: '#334155' }} />
+                 <div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', opacity: 0.5 }}>
+                    <Zap size={48} style={{ marginBottom:'10px', color:'#334155' }} />
                     <p>Awaiting Code Input...</p>
                  </div>
                )}
@@ -372,7 +361,7 @@ function App() {
         </div>
       </div>
 
-      {/* MODAL */}
+      {/* MODAL - FIXED SCROLLING */}
       {isFullScreen && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
@@ -387,9 +376,9 @@ function App() {
               <X size={24} />
             </button>
           </div>
-          <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'auto', background: '#020617', borderRadius: '16px', border: '1px solid #334155' }}>
-             <div ref={(el) => { if(el) el.innerHTML = mermaidRef.current ? mermaidRef.current.innerHTML : ''; }} className="mermaid" style={{ transform: 'scale(1.5)', transformOrigin: 'center' }}>
-             </div>
+          {/* Scrollable Container with NO Transform/Scale */}
+          <div style={{ flex: 1, overflow: 'auto', background: '#020617', borderRadius: '16px', border: '1px solid #334155', display:'flex', justifyContent:'center', alignItems:'flex-start', padding:'40px' }}>
+             <div ref={modalRef} className="mermaid" style={{ width: '100%' }}></div>
           </div>
         </div>
       )}
