@@ -2,10 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { Code2, Play, GitGraph, Loader2, Zap, LayoutTemplate, Clock, Database, Flame, Languages, Lightbulb, Maximize2, X, Wand2, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import mermaid from 'mermaid'
 
+// CONFIG: Stop the ugly error box
 mermaid.initialize({ 
   startOnLoad: true,
   theme: 'base',
   securityLevel: 'loose',
+  suppressErrorRendering: true, // <--- THIS KILLS THE UGLY ERROR
   flowchart: { curve: 'basis', padding: 20 },
   themeVariables: {
     primaryColor: '#1e293b',
@@ -58,26 +60,29 @@ function App() {
     return chart;
   }
 
-  // RENDER ENGINE
+  // RENDER ENGINE (With Pre-Check)
   const renderMermaid = async () => {
-    if (diagramCode && mermaidRef.current) {
+    if (diagramCode) {
       try {
-        mermaidRef.current.removeAttribute('data-processed');
-        mermaidRef.current.innerHTML = diagramCode; 
-        await mermaid.run({ nodes: [mermaidRef.current] }); 
-        setErrorMsg('');
-      } catch (e) {
-        console.error("Mermaid Render Fail:", e);
-        setErrorMsg("⚠️ Diagram too complex for visualizer. Analysis below is correct.");
-        mermaidRef.current.innerHTML = ''; 
-      }
-    }
-    if (isFullScreen && diagramCode && modalRef.current) {
-        try {
+        // Step 1: Check if valid BEFORE rendering
+        await mermaid.parse(diagramCode);
+        
+        // Step 2: Render if valid
+        if (mermaidRef.current) {
+            mermaidRef.current.removeAttribute('data-processed');
+            mermaidRef.current.innerHTML = diagramCode; 
+            await mermaid.run({ nodes: [mermaidRef.current] }); 
+            setErrorMsg('');
+        }
+        if (isFullScreen && modalRef.current) {
             modalRef.current.removeAttribute('data-processed');
             modalRef.current.innerHTML = diagramCode;
             await mermaid.run({ nodes: [modalRef.current] });
-        } catch(e) { console.log("Modal render error", e) }
+        }
+      } catch (e) {
+        console.error("Mermaid Render Fail:", e);
+        setErrorMsg("⚠️ Diagram Logic too complex to visualize. Check Analysis below.");
+      }
     }
   };
 
@@ -103,7 +108,6 @@ function App() {
       roastInstruction += " CRITICAL: Output in ROMANIZED English alphabets only. NO NATIVE SCRIPTS."
     }
 
-    // 2. FIXED PROMPT
     const prompt = `
       You are an elite AI. Analyze the code. Return a strictly valid JSON.
       
@@ -155,7 +159,7 @@ function App() {
         space: content.spaceComplexity,
         roast: content.roast,
         hint: content.hint,
-        fixedCode: content.fixedCode || codeToUse // Fallback
+        fixedCode: content.fixedCode || codeToUse
       })
 
     } catch (error) {
@@ -177,7 +181,6 @@ function App() {
     }
   }, [language]);
 
-  // FIX BUTTON LOGIC
   const applyFix = () => {
     if (analysis.fixedCode && analysis.fixedCode !== "null") {
       const newCode = analysis.fixedCode;
@@ -233,11 +236,13 @@ function App() {
                 <option value="English">English</option>
                 <option value="Bengali">Bengali (Strict Dada)</option>
                 <option value="Hindi">Hindi (Roaster)</option>
+                <option value="GenZ Slang">GenZ Slang</option>
+                <option value="Pirate">Pirate Speak</option>
+                <option value="Shakespearean">Shakespearean</option>
                 <option value="Chinese">Chinese (Sarcastic)</option>
                 <option value="Japanese">Japanese (Anime)</option>
                 <option value="Spanish">Spanish</option>
-                <option value="GenZ Slang">GenZ Slang</option>
-                <option value="Pirate">Pirate Speak</option>
+                <option value="French">French</option>
               </select>
             </div>
           </div>
@@ -361,7 +366,7 @@ function App() {
         </div>
       </div>
 
-      {/* MODAL - FIXED SCROLLING */}
+      {/* MODAL */}
       {isFullScreen && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
@@ -376,7 +381,7 @@ function App() {
               <X size={24} />
             </button>
           </div>
-          {/* Scrollable Container with NO Transform/Scale */}
+          {/* Scrollable Container */}
           <div style={{ flex: 1, overflow: 'auto', background: '#020617', borderRadius: '16px', border: '1px solid #334155', display:'flex', justifyContent:'center', alignItems:'flex-start', padding:'40px' }}>
              <div ref={modalRef} className="mermaid" style={{ width: '100%' }}></div>
           </div>
