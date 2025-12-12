@@ -100,4 +100,7 @@ npm run dev
 ```
 
 
-🤝 Connect & ContributeWe'd love to hear from you! Found a bug? Want a new roasting language?<div align="center">🐛 Report a Bug💡 Feature Request🌟 Star the RepoOpen IssueDiscussionsGive a Star</div><div align="center">
+Feedback & Support
+Found a bug? Want a new roasting language? Drop a suggestion via the Feedback Form in the app!
+
+ Made with ❤️ in INDIA
