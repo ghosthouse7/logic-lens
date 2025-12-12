@@ -97,7 +97,7 @@ echo "VITE_GROQ_API_KEY=your_key_here" > .env
 
 # 5. Start the engine
 npm run dev
-Feedback & Support
-Found a bug? Want a new roasting language? Drop a suggestion via the Feedback Form in the app!
 
-<div align="center"> Made with ❤️ in <strong>INDIA</strong> </div>
+
+
+🤝 Connect & ContributeWe'd love to hear from you! Found a bug? Want a new roasting language?<div align="center">🐛 Report a Bug💡 Feature Request🌟 Star the RepoOpen IssueDiscussionsGive a Star</div><div align="center">👷‍♀️ Maintained by<p><em>Built with Made with ❤️ in <strong>INDIA</strong>  </div>.</em></p></div>
