@@ -1,37 +1,28 @@
 import { useState, useEffect, useRef } from 'react'
-// FIXED IMPORTS: Added BookOpen, Rabbit, Trash2
-import { Code2, Play, GitGraph, Loader2, Zap, LayoutTemplate, Clock, Database, Flame, Languages, Lightbulb, Maximize2, X, Wand2, AlertTriangle, CheckCircle2, Menu, Github, BookOpen, Rabbit, Trash2 } from 'lucide-react'
+import { 
+  Code2, Play, GitGraph, Loader2, Zap, LayoutTemplate, 
+  Clock, Database, Flame, Languages, Lightbulb, Maximize2, 
+  X, Wand2, AlertTriangle, CheckCircle2, ArrowRight, 
+  Github, BookOpen, Terminal, ChevronDown, Menu, Rabbit, Trash2, Mail, MessageSquare 
+} from 'lucide-react'
 import mermaid from 'mermaid'
 
 // CONFIG
 mermaid.initialize({ 
-  startOnLoad: true,
-  theme: 'base',
-  securityLevel: 'loose',
-  suppressErrorRendering: true, 
+  startOnLoad: true, 
+  theme: 'default', 
+  securityLevel: 'loose', 
+  suppressErrorRendering: true,
   flowchart: { curve: 'basis', padding: 20 },
-  themeVariables: {
-    primaryColor: '#1e293b',
-    primaryTextColor: '#e2e8f0',
-    primaryBorderColor: '#38bdf8',
-    lineColor: '#94a3b8',
-    secondaryColor: '#0f172a',
-    tertiaryColor: '#1e1b4b'
-  }
 })
 
-// HELPER COMPONENTS
 const MenuItem = ({ icon: Icon, label, link, onClick, color }) => (
-    <a 
-        className="menu-item"
-        href={link || '#'}
-        target={link ? "_blank" : "_self"}
-        rel="noopener noreferrer"
-        onClick={onClick}
-        style={{ color: color || '#94a3b8', textDecoration: 'none' }} 
+    <a href={link || '#'} target={link ? "_blank" : "_self"} rel="noopener noreferrer" onClick={onClick}
+       style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px', cursor: 'pointer', borderRadius: '6px', textDecoration: 'none', color: color || '#475569', transition: 'background 0.2s' }}
+       onMouseOver={(e) => { e.currentTarget.style.background = '#eff6ff'; e.currentTarget.style.color = '#1e293b'; }}
+       onMouseOut={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = color || '#475569'; }}
     >
-        <Icon size={18} />
-        <span>{label}</span>
+        <Icon size={18} /><span>{label}</span>
     </a>
 );
 
@@ -43,18 +34,18 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [activeTab, setActiveTab] = useState('Flowchart'); 
-  const [isMenuOpen, setIsMenuOpen] = useState(false); 
-  const [appState, setAppState] = useState('WELCOME'); 
-  const [showSuccess, setShowSuccess] = useState(false) 
   const [errorMsg, setErrorMsg] = useState(''); 
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [feedback, setFeedback] = useState('');
   
   const mermaidRef = useRef(null)
   const modalRef = useRef(null) 
+  const workspaceRef = useRef(null) 
 
-  // --- LOGIC FUNCTIONS ---
+  // --- SAFE FLOWCHART ---
   const generateSafeFlowchart = (steps) => {
     if (!steps || !Array.isArray(steps)) return 'graph TD\nError["Analysis Failed"]';
-    
     let chart = 'graph TD\n';
     if (steps.length > 0) { chart += `Start([Start]) --> ${steps[0].id}\n`; } 
     else { return 'graph TD\nStart([Start]) --> End([End])\n'; }
@@ -72,59 +63,64 @@ function App() {
     return chart;
   }
 
+  // --- RENDER MERMAID ---
   const renderMermaid = async () => {
-    if (diagramCode) {
+    // Only render if code exists AND we are on the Flowchart tab (or fullscreen)
+    if (diagramCode && (activeTab === 'Flowchart' || isFullScreen)) {
       try {
         await mermaid.parse(diagramCode);
         
+        // 1. Render in Main Box
         if (mermaidRef.current) {
+            mermaidRef.current.innerHTML = '';
             mermaidRef.current.removeAttribute('data-processed');
-            mermaidRef.current.innerHTML = diagramCode; 
+            mermaidRef.current.innerHTML = diagramCode;
             await mermaid.run({ nodes: [mermaidRef.current] }); 
         }
+        
+        // 2. Render in Modal
         if (isFullScreen && modalRef.current) {
+            modalRef.current.innerHTML = '';
             modalRef.current.removeAttribute('data-processed');
             modalRef.current.innerHTML = diagramCode;
             await mermaid.run({ nodes: [modalRef.current] });
         }
         setErrorMsg('');
       } catch (e) {
-        console.error("Mermaid Render Fail:", e);
-        setErrorMsg("⚠️ Diagram Logic too complex to visualize. Check Analysis below.");
+        console.error("Mermaid Fail:", e);
+        if(!diagramCode) setErrorMsg("⚠️ Logic too complex.");
       }
     }
   };
 
-  useEffect(() => { setTimeout(renderMermaid, 200); }, [diagramCode, isFullScreen]);
+  // ADDED activeTab to dependency: Render happens when tab switches!
+  useEffect(() => { 
+      const timer = setTimeout(renderMermaid, 200);
+      return () => clearTimeout(timer);
+  }, [diagramCode, isFullScreen, activeTab]);
 
-  const handleVisualize = async (codeToUse = inputCode, langToUse = language) => {
-    if (!codeToUse.trim()) return alert("Please enter some code first!")
+  // --- API CALL ---
+  const handleVisualize = async (codeOverride = null, langOverride = null) => {
+    const codeToUse = codeOverride !== null ? codeOverride : inputCode;
+    const langToUse = langOverride !== null ? langOverride : language;
+
+    if (!codeToUse.trim()) return alert("Please enter code!")
     
     setLoading(true);
-    setActiveTab('Flowchart'); 
     
-    const apiKey = import.meta.env.VITE_GROQ_API_KEY
-    if (!apiKey) { setLoading(false); return alert("Missing API Key! Check .env file"); }
-
-    let roastInstruction = `A funny roast in ${langToUse}.`
-    if (langToUse !== "English") { roastInstruction += " CRITICAL: Output in ROMANIZED English alphabets only. NO NATIVE SCRIPTS." }
+    const apiKey = import.meta.env.VITE_GROQ_API_KEY;
+    if (!apiKey) { setLoading(false); return alert("Missing API Key!"); }
 
     const prompt = `
-      You are an elite AI. Analyze the code. Return a strictly valid JSON.
-      
-      INSTEAD OF GRAPH CODE, RETURN A LIST OF STEPS.
-      "steps": [ {"id": "s1", "type": "io", "label": "Read input"}, {"id": "s2", "type": "decision", "label": "Is n < 0"} ]
-      
-      JSON OUTPUT FORMAT:
-      {
-        "steps": [],
-        "timeComplexity": "Big O",
-        "spaceComplexity": "Big O",
-        "roast": "${roastInstruction}",
-        "hint": "Optimization tip",
-        "fixedCode": "Refactored optimized code. IF CODE IS ALREADY GOOD, RETURN THE ORIGINAL CODE. DO NOT RETURN NULL."
+      Analyze code. Return JSON.
+      STEPS: List for flowchart. Types: 'process', 'decision', 'io'.
+      JSON: {
+        "steps": [{"id": "s1", "type": "io", "label": "Read input"}, {"id": "s2", "type": "decision", "label": "n < 0?"}],
+        "timeComplexity": "O(n)", "spaceComplexity": "O(1)",
+        "roast": "Funny roast in ${langToUse}",
+        "hint": "Fix hint", "fixedCode": "Better code"
       }
-      USER CODE: ${codeToUse}
+      CODE: ${codeToUse}
     `
 
     try {
@@ -133,190 +129,171 @@ function App() {
         body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: [{ role: "user", content: prompt }], temperature: 0.1, response_format: { type: "json_object" }})
       });
       const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
-
-      const content = JSON.parse(data.choices[0].message.content)
+      const content = JSON.parse(data.choices[0].message.content);
       const safeGraph = generateSafeFlowchart(content.steps);
-
-      setDiagramCode(safeGraph)
-      setAnalysis({ time: content.timeComplexity, space: content.spaceComplexity, roast: content.roast, hint: content.hint, fixedCode: content.fixedCode || codeToUse })
-
-      try { await mermaid.parse(safeGraph); setErrorMsg(''); } 
-      catch { setErrorMsg("⚠️ Diagram Logic too complex to visualize. Check Analysis below."); }
-
-    } catch (error) {
-      console.error("API Error:", error)
-      setErrorMsg(`Agent Disconnected: ${error.message}`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const isFirstRun = useRef(true);
-  useEffect(() => {
-    if (isFirstRun.current) { isFirstRun.current = false; return; }
-    if (inputCode && !loading) { handleVisualize(inputCode, language); }
-  }, [language]);
-
-  const applyFix = () => {
-    if (analysis.fixedCode && analysis.fixedCode !== "null") {
-      const newCode = analysis.fixedCode;
-      setInputCode(newCode); 
-      setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
-      setAnalysis(prev => ({ ...prev, fixedCode: null })); 
-      handleVisualize(newCode, language); 
-    } else { alert("Code is already optimal!"); }
-  }
-
-  const handleReset = () => {
-    setInputCode(''); setDiagramCode('');
-    setAnalysis({ time: '', space: '', roast: '', hint: '', fixedCode: '' });
-    setIsMenuOpen(false);
-  }
-  
-  const TabButton = ({ tabName }) => (
-    <button onClick={() => setActiveTab(tabName)} style={{ padding: '10px 15px', fontWeight: 'bold', fontSize: '0.9rem', border: 'none', borderRadius: '8px 8px 0 0', cursor: 'pointer', background: activeTab === tabName ? '#38bdf8' : 'rgba(56, 189, 248, 0.2)', color: activeTab === tabName ? '#0f172a' : '#f8fafc', transition: 'all 0.2s', boxShadow: activeTab === tabName ? '0 -4px 10px rgba(56, 189, 248, 0.4)' : 'none', }}>
-      {tabName}
-    </button>
-  );
-
-  const successShowCheck = () => {
-    return showSuccess ? <span style={{display:'flex', alignItems:'center', gap:'5px', color:'#fff', fontWeight:'bold'}}><CheckCircle2 size={16}/> Code Updated!</span> : null;
-  }
-
-  // RENDER CONTENT
-  const renderContent = () => {
-    switch (activeTab) {
-        case 'Flowchart': return (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', gap: '15px', marginBottom: '10px' }}>
-              <div className="glass-card" style={{ flex: 1, borderRadius: '12px', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)' }}><Clock size={18} color="#60a5fa" /><span style={{ fontWeight: 'bold', color: '#93c5fd' }}>Time: {analysis.time || "-"}</span></div>
-              <div className="glass-card" style={{ flex: 1, borderRadius: '12px', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)' }}><Database size={18} color="#34d399" /><span style={{ fontWeight: 'bold', color: '#6ee7b7' }}>Space: {analysis.space || "-"}</span></div>
-            </div>
-            <div className="glass-card" style={{ flex: 1, borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '10px', marginBottom: '10px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', color: '#10b981' }}><LayoutTemplate size={20} /> Logic Flowchart</span>
-                {diagramCode && !errorMsg && (<button onClick={() => setIsFullScreen(true)} style={{ background: 'transparent', border: 'none', color: '#38bdf8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}><Maximize2 size={18} /> <span style={{fontSize: '0.8rem'}}>Expand</span></button>)}
-              </div>
-              <div style={{ flex: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflow: 'auto', background: '#020617', borderRadius: '12px', border: '1px solid #1e293b', padding: '20px' }}>
-                {errorMsg ? (<div style={{ color: '#ef4444', textAlign: 'center', padding: '20px' }}><AlertTriangle size={48} style={{ margin: '0 auto 10px', display: 'block' }} /><p style={{ fontWeight: 'bold' }}>{errorMsg}</p><button onClick={() => handleVisualize(inputCode, language)} style={{marginTop:'10px', padding:'5px 10px', background:'#334155', border:'none', color:'white', borderRadius:'5px', cursor:'pointer'}}>Retry</button></div>) : (<div ref={mermaidRef} className="mermaid" style={{ width: '100%' }}></div>)}
-                {!diagramCode && !errorMsg && !loading && (<div style={{ width:'100%', height:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', opacity: 0.5 }}><Zap size={48} style={{ marginBottom:'10px', color:'#334155' }} /><p>Awaiting Code Input...</p></div>)}
-              </div>
-            </div>
-          </div>
-        );
-        case 'Analysis': return (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', paddingTop: '20px' }}>
-            <div style={{ display: 'flex', gap: '15px' }}>
-               <div className="glass-card" style={{ flex: 1, borderRadius: '12px', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid rgba(59, 130, 246, 0.2)' }}><Clock size={18} color="#60a5fa" /><span style={{ fontWeight: 'bold', color: '#60a5fa' }}>Time Complexity</span></div>
-               <div className="glass-card" style={{ flex: 1, borderRadius: '12px', padding: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)' }}><Database size={18} color="#34d399" /><span style={{ fontWeight: 'bold', color: '#34d399' }}>Space Complexity</span></div>
-            </div>
-            <div className="glass-card" style={{ flex: 1, borderRadius: '12px', padding: '15px', display: 'flex', flexDirection: 'column', background: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
-               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '5px' }}>
-                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#facc15' }}><Lightbulb size={18} /><span style={{ fontWeight: 'bold', fontSize: '0.8rem', textTransform: 'uppercase' }}>Agent Suggestion</span></div>
-                 {analysis.fixedCode && analysis.fixedCode !== "null" && (<button onClick={applyFix} style={{ background: '#eab308', color: '#000', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px', boxShadow: '0 0 20px rgba(234, 179, 8, 0.4)' }}><Wand2 size={12} /> Auto-Fix Code</button>)}
-               </div>
-               <p style={{ margin: 0, fontSize: '0.9rem', color: '#fef08a' }}>{successShowCheck() || (analysis.hint || "Run code to get optimization tips...")}</p>
-            </div>
-            <div style={{ flex: 1, minHeight: '100px'}}></div>
-          </div>
-        );
-        case 'Roast': return (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px', paddingTop: '20px' }}>
-            <div className="glass-card" style={{ flex: 1, borderRadius: '12px', padding: '15px', display: 'flex', flexDirection: 'column', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
-               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px', color: '#f87171' }}><Flame size={18} /><span style={{ fontWeight: 'bold', fontSize: '0.8rem', textTransform: 'uppercase' }}>AI Roast ({language})</span></div>
-               <p style={{ margin: 0, fontSize: '0.9rem', color: '#fca5a5', fontStyle: 'italic' }}>{analysis.roast ? `"${analysis.roast}"` : "Waiting to roast..."}</p>
-            </div>
-            <div style={{ flex: 1, minHeight: '200px'}}></div>
-          </div>
-        );
-        default: return null;
-    }
-  };
-
-  if (appState === 'WELCOME') return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', padding: '40px', textAlign: 'center', background: '#020617' }}>
-          <h1 style={{ fontSize: '3rem', color: '#38bdf8', textShadow: '0 0 20px rgba(56,189,248,0.7)', fontWeight: '800' }}>LogicLens</h1>
-          <p style={{ fontSize: '1.2rem', color: '#94a3b8', marginTop: '10px', marginBottom: '30px' }}>Your AI-Powered Code Visualizer, Mentor, and Roaster.</p>
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '40px', justifyContent: 'center' }}>
-              <div style={{ background: 'rgba(56, 189, 248, 0.2)', padding: '15px', borderRadius: '12px', width: '200px' }}><GitGraph color="#38bdf8" size={32} /><p style={{ marginTop: '10px', fontWeight: 'bold' }}>Visual Flowcharting</p></div>
-              <div style={{ background: 'rgba(234, 179, 8, 0.2)', padding: '15px', borderRadius: '12px', width: '200px' }}><Wand2 color="#facc15" size={32} /><p style={{ marginTop: '10px', fontWeight: 'bold' }}>O(n²) Auto-Fixing</p></div>
-          </div>
-          <button onClick={() => setAppState('MAIN')} style={{ background: 'linear-gradient(90deg, #38bdf8, #818cf8)', color: '#0f172a', padding: '15px 40px', borderRadius: '12px', fontWeight: '900', fontSize: '1.2rem', cursor: 'pointer', border: 'none', boxShadow: '0 0 20px rgba(56, 189, 248, 0.4)' }}>START ANALYSIS 🚀</button>
-          <p style={{ marginTop: '30px', color: '#475569', fontSize: '0.8rem' }}>Built with Groq AI, Vercel, and CodeRabbit.</p>
-      </div>
-  );
-  
-  return (
-    <div style={{ minWidth: '320px', minHeight: '100vh', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', boxSizing: 'border-box' }}>
       
-      {/* HEADER */}
-      <header className="glass-card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '15px 30px', borderRadius: '16px', position: 'relative', zIndex: 50 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <div style={{ background: 'rgba(56, 189, 248, 0.2)', padding: '10px', borderRadius: '12px', boxShadow: '0 0 10px rgba(56,189,248,0.3)' }}><GitGraph color="#38bdf8" size={32} /></div>
-          <div><h1 style={{ margin: 0, fontSize: '1.8rem', color: '#f8fafc', fontWeight: '800', letterSpacing: '-1px', textShadow: '0 0 20px rgba(56,189,248,0.5)' }}>Logic<span style={{ color: '#38bdf8' }}>Lens</span></h1><p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '5px', textTransform: 'uppercase', letterSpacing: '1px' }}><Zap size={12} color="#eab308" /> AI-Powered Agent</p></div>
-        </div>
-        
-        {/* HAMBURGER MENU ICON */}
-        <button onClick={() => setIsMenuOpen(!isMenuOpen)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '10px', borderRadius: '50%', transition: 'background 0.2s', backgroundColor: isMenuOpen ? 'rgba(56, 189, 248, 0.3)' : 'transparent', zIndex: 1001 }}><Menu size={28} color="#38bdf8" /></button>
+      setDiagramCode(safeGraph);
+      setAnalysis({ time: content.timeComplexity, space: content.spaceComplexity, roast: content.roast, hint: content.hint, fixedCode: content.fixedCode || codeToUse });
+      
+    } catch (e) { console.error(e); setErrorMsg("API Error."); } 
+    finally { setLoading(false); }
+  }
 
-        {/* SOLID MENU BOX */}
+  // --- FIX: FORCE TAB SWITCH ON AUTO-FIX ---
+  const applyFix = () => {
+    if (analysis.fixedCode) {
+        const fixed = analysis.fixedCode;
+        setInputCode(fixed);
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 3000);
+        
+        // 1. Force Switch to Flowchart Tab so div exists
+        setActiveTab('Flowchart'); 
+        
+        // 2. Run Analysis
+        handleVisualize(fixed, language); 
+    }
+  }
+
+  const handleLanguageChange = (e) => {
+      const newLang = e.target.value;
+      setLanguage(newLang);
+      if (inputCode.trim() && !loading) handleVisualize(inputCode, newLang);
+  }
+
+  const handleFeedback = () => {
+      if (!feedback.trim()) return;
+      window.location.href = `mailto:kmeghasar@gmail.com?subject=LogicLens Feedback&body=${encodeURIComponent(feedback)}`;
+      setFeedback('');
+      alert("Opening email client...");
+  }
+
+  const scrollToWork = () => workspaceRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const handleReset = () => { setInputCode(''); setDiagramCode(''); setAnalysis({ time: '', space: '', roast: '', hint: '', fixedCode: '' }); setIsMenuOpen(false); }
+
+  return (
+    <div className="app-container" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f8fafc', color: '#0f172a' }}>
+      
+      {/* NAVBAR */}
+      <nav style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 5%', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(10px)', position: 'fixed', top: 0, width: '100%', zIndex: 100, borderBottom: '1px solid #e2e8f0', boxSizing: 'border-box' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontWeight: '800', fontSize: '1.2rem', color: '#0f172a' }}>
+          <div style={{background:'#0f172a', padding:'6px', borderRadius:'6px', display:'flex'}}><Zap size={18} color="white"/></div> LogicLens
+        </div>
+        <button onClick={() => setIsMenuOpen(!isMenuOpen)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', borderRadius: '50%' }}>
+            {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
         {isMenuOpen && (
-            <div style={{
-                position: 'absolute', top: '100%', right: '20px', zIndex: 1000, 
-                width: '250px', padding: '10px', marginTop: '10px', borderRadius: '12px',
-                background: '#0f172a', // SOLID COLOR
-                border: '1px solid #334155', boxShadow: '0 10px 20px rgba(0,0,0,0.8)'
-            }}>
-                <div style={{ color: '#f8fafc', padding: '5px 0', borderBottom: '1px solid #334155', marginBottom: '5px', fontWeight: 'bold' }}>Submission Links</div>
-                <MenuItem icon={Github} label="GitHub Repo" link="https://github.com/ghosthouse7/logic-lens" color="#f87171" />
-                <MenuItem icon={BookOpen} label="Documentation (README)" link="https://github.com/ghosthouse7/logic-lens/blob/main/README.md" />
+            <div style={{ position: 'absolute', top: '70px', right: '20px', width: '250px', padding: '15px', borderRadius: '12px', background: 'white', border: '1px solid #e2e8f0', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}>
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: '700', marginBottom: '10px', textTransform: 'uppercase' }}>Checklist</div>
+                <MenuItem icon={Github} label="GitHub Repo" link="https://github.com/ghosthouse7/logic-lens" color="#0f172a" />
+                <MenuItem icon={BookOpen} label="Documentation" link="https://github.com/ghosthouse7/logic-lens/blob/main/README.md" />
                 <MenuItem icon={Rabbit} label="CodeRabbit Review" link="https://coderabbit.ai/" />
-                <div style={{ borderTop: '1px solid #334155', margin: '5px 0' }}></div>
-                <MenuItem icon={Trash2} label="Reset App" onClick={handleReset} color="#facc15" />
-                <MenuItem icon={X} label="Close" onClick={() => setIsMenuOpen(false)} />
+                <div style={{ borderTop: '1px solid #f1f5f9', margin: '10px 0' }}></div>
+                <MenuItem icon={Trash2} label="Reset Workspace" onClick={handleReset} color="#ef4444" />
             </div>
         )}
-      </header>
-      
-      {/* Menu CSS */}
-      <style>{` .menu-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; cursor: pointer; transition: background 0.2s; border-radius: 6px; color: #94a3b8; text-decoration: none; } .menu-item:hover { background: rgba(56, 189, 248, 0.1); color: #f8fafc; } `}</style>
-      
-      {/* MAIN AREA */}
-      <div style={{ display: 'flex', gap: '20px', flex: 1, overflow: 'hidden' }}>
-        
-        {/* LEFT */}
-        <div className="glass-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '15px', padding: '20px', borderRadius: '16px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #334155', paddingBottom: '10px' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '600', color: '#38bdf8' }}><Code2 size={20} /> Input Code</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-              <Languages size={16} color="#94a3b8"/>
-              <select value={language} onChange={(e) => setLanguage(e.target.value)} style={{ background: '#0f172a', color: '#f8fafc', border: '1px solid #334155', borderRadius: '6px', padding: '4px 8px', outline: 'none', fontSize: '0.8rem', cursor: 'pointer' }}>
-                <option value="English">English</option><option value="Bengali">Bengali (Strict Dada)</option><option value="Hindi">Hindi (Roaster)</option><option value="GenZ Slang">GenZ Slang</option><option value="Pirate">Pirate Speak</option><option value="Shakespearean">Shakespearean</option><option value="Chinese">Chinese (Sarcastic)</option><option value="Japanese">Japanese (Anime)</option><option value="Spanish">Spanish</option><option value="French">French</option>
-              </select>
+      </nav>
+
+      {/* HERO SECTION */}
+      <section style={{ paddingTop: '140px', paddingBottom: '80px', paddingLeft:'20px', paddingRight:'20px', maxWidth: '1000px', margin: '0 auto', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ marginBottom: '20px', padding: '6px 16px', background: '#eff6ff', borderRadius: '50px', fontSize: '0.8rem', fontWeight: '600', color: '#2563eb', border: '1px solid #dbeafe' }}>🚀 Powered by Groq Llama 3 & Vercel</div>
+        <h1 style={{ fontSize: '3.5rem', fontWeight: '900', lineHeight: '1.1', color: '#0f172a', marginBottom: '20px', letterSpacing: '-1px' }}>Decode your logic. <br/> <span style={{ color: '#3b82f6' }}>Optimize your impact.</span></h1>
+        <p style={{ fontSize: '1.2rem', color: '#64748b', maxWidth: '600px', lineHeight: '1.6', marginBottom: '40px', fontStyle: 'italic' }}>"Programming isn't about what you know; it's about what you can figure out. Let LogicLens figure it out for you."</p>
+        <button onClick={scrollToWork} className="btn-primary" style={{ padding: '16px 40px', borderRadius: '50px', fontSize: '1.1rem', fontWeight: '600', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', background: '#0f172a', color: 'white', boxShadow: '0 4px 14px 0 rgba(0,0,0,0.39)' }}>Start Analyzing <ArrowRight size={20} /></button>
+        <div style={{ marginTop: '60px', animation: 'bounce 2s infinite' }}><ChevronDown color="#94a3b8" /></div>
+      </section>
+
+      {/* SERVICES */}
+      <section id="services" style={{ padding: '60px 20px', maxWidth: '1100px', margin: '0 auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+          <div className="service-card" style={{ padding: '30px', borderRadius: '16px', background:'white', border:'1px solid #e2e8f0' }}><div style={{ background: '#eff6ff', width: '48px', height: '48px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px', color: '#2563eb' }}><GitGraph size={24} /></div><h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '10px', color: '#1e293b' }}>Visual Flowcharts</h3><p style={{ color: '#64748b', fontSize: '0.95rem' }}>Convert spaghetti code into professional Mermaid.js diagrams instantly.</p></div>
+          <div className="service-card" style={{ padding: '30px', borderRadius: '16px', background:'white', border:'1px solid #e2e8f0' }}><div style={{ background: '#fffbeb', width: '48px', height: '48px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px', color: '#d97706' }}><Wand2 size={24} /></div><h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '10px', color: '#1e293b' }}>O(n) Auto-Fix</h3><p style={{ color: '#64748b', fontSize: '0.95rem' }}>AI Agent detects inefficient loops and refactors them to O(n) or O(log n).</p></div>
+          <div className="service-card" style={{ padding: '30px', borderRadius: '16px', background:'white', border:'1px solid #e2e8f0' }}><div style={{ background: '#fef2f2', width: '48px', height: '48px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px', color: '#dc2626' }}><Flame size={24} /></div><h3 style={{ fontSize: '1.2rem', fontWeight: '700', marginBottom: '10px', color: '#1e293b' }}>Code Roast</h3><p style={{ color: '#64748b', fontSize: '0.95rem' }}>Get brutal, witty feedback in Hindi, Bengali or GenZ slang.</p></div>
+        </div>
+      </section>
+
+      {/* WORKSPACE */}
+      <section ref={workspaceRef} style={{ padding: '60px 20px', background: 'white', borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
+            <div><h2 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a' }}>Workspace</h2><p style={{ color: '#64748b' }}>Paste your code below to begin analysis.</p></div>
+            <select value={language} onChange={handleLanguageChange} style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontWeight: '600', color: '#334155' }}>
+              <option value="English">English</option><option value="Bengali">Bengali (Strict Dada)</option><option value="Hindi">Hindi (Roaster)</option><option value="GenZ Slang">GenZ Slang</option><option value="Pirate">Pirate Speak</option><option value="Shakespearean">Shakespearean</option><option value="Chinese">Chinese (Sarcastic)</option><option value="Japanese">Japanese (Anime)</option><option value="Spanish">Spanish</option><option value="French">French</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: '350px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '600px' }}>
+              <div style={{ padding: '15px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', gap: '8px', alignItems: 'center', color: '#64748b', fontWeight: '600', fontSize: '0.9rem', background: '#f1f5f9' }}><Code2 size={16}/> Source Code</div>
+              <textarea value={inputCode} onChange={(e) => setInputCode(e.target.value)} placeholder="// Paste your recursive mess here..." style={{ flex: 1, padding: '20px', border: 'none', resize: 'none', outline: 'none', background: 'transparent', fontFamily: 'monospace', fontSize: '14px' }} />
+              <div style={{ padding: '20px', background: 'white', borderTop: '1px solid #e2e8f0' }}>
+                <button onClick={() => handleVisualize(null, null)} disabled={loading} style={{ width: '100%', padding: '14px', borderRadius: '8px', fontWeight: '700', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: '10px', background: loading ? '#94a3b8' : '#0f172a', color: 'white' }}>{loading ? <Loader2 className="animate-spin" /> : <Play size={18} />} {loading ? "Analyzing..." : "Run Analysis"}</button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, minWidth: '350px', background: 'white', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.05)', overflow: 'hidden', height: '600px', display: 'flex', flexDirection: 'column' }}>
+               <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0' }}>
+                 {['Flowchart', 'Analysis', 'Roast'].map(tab => (<button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: '15px', background: activeTab === tab ? 'white' : '#f8fafc', border: 'none', borderBottom: activeTab === tab ? '2px solid #0f172a' : 'none', fontWeight: '600', color: activeTab === tab ? '#0f172a' : '#94a3b8', cursor: 'pointer' }}>{tab}</button>))}
+               </div>
+               
+               <div style={{ flex: 1, padding: '20px', overflow: 'auto', background: '#ffffff', position: 'relative' }}>
+                 {activeTab === 'Flowchart' && (
+                   <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                     {diagramCode ? 
+                        <div key={diagramCode} className="mermaid" onClick={() => setIsFullScreen(true)} style={{cursor: 'zoom-in', width:'100%'}} ref={mermaidRef}></div> 
+                        : <div style={{textAlign:'center', color:'#94a3b8'}}><LayoutTemplate size={40} style={{opacity:0.3, margin:'0 auto 10px'}}/><p>Visualization awaits...</p></div>}
+                   </div>
+                 )}
+                 {activeTab === 'Analysis' && (
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                        <div style={{ padding: '20px', background: '#eff6ff', borderRadius: '12px', border: '1px solid #dbeafe' }}><div style={{fontWeight:'600', color:'#2563eb', fontSize:'0.9rem', marginBottom:'5px'}}>Time</div><div style={{fontSize:'1.5rem', fontWeight:'700', color:'#1e3a8a'}}>{analysis.time || "-"}</div></div>
+                        <div style={{ padding: '20px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #dcfce7' }}><div style={{fontWeight:'600', color:'#16a34a', fontSize:'0.9rem', marginBottom:'5px'}}>Space</div><div style={{fontSize:'1.5rem', fontWeight:'700', color:'#14532d'}}>{analysis.space || "-"}</div></div>
+                      </div>
+                      {analysis.fixedCode && (
+                        <div style={{ padding: '20px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{fontWeight:'700', color:'#b45309'}}>Suggestion</span><button onClick={applyFix} style={{background:'#d97706', color:'white', border:'none', padding:'5px 10px', borderRadius:'6px', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600'}}>Auto-Fix</button></div>
+                          <p style={{ color: '#92400e', fontSize: '0.95rem' }}>{showSuccess ? "Code Updated!" : analysis.hint}</p>
+                        </div>
+                      )}
+                   </div>
+                 )}
+                 {activeTab === 'Roast' && (
+                   <div style={{ padding: '30px', background: '#fef2f2', borderRadius: '16px', border: '1px solid #fecaca', textAlign: 'center' }}>
+                     <Flame size={32} color="#dc2626" style={{ margin: '0 auto 15px' }} />
+                     <p style={{ color: '#991b1b', fontStyle: 'italic', fontSize: '1.1rem' }}>"{analysis.roast || "Select a language and run analysis..."}"</p>
+                   </div>
+                 )}
+               </div>
             </div>
           </div>
-          <textarea value={inputCode} onChange={(e) => setInputCode(e.target.value)} placeholder="// Paste your code here..." style={{ flex: 1, backgroundColor: '#020617', color: '#f1f5f9', border: '1px solid #334155', borderRadius: '12px', padding: '20px', fontFamily: "'Fira Code', monospace", fontSize: '14px', resize: 'none', outline: 'none', boxShadow: 'inset 0 0 10px rgba(0,0,0,0.5)' }} />
-          <button onClick={() => handleVisualize(inputCode, language)} disabled={loading} style={{ background: loading ? '#334155' : 'linear-gradient(90deg, #38bdf8, #818cf8)', color: loading ? '#94a3b8' : '#fff', border: 'none', padding: '16px', borderRadius: '12px', fontWeight: '700', fontSize: '1rem', cursor: loading ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', boxShadow: loading ? 'none' : '0 0 20px rgba(56, 189, 248, 0.4)', transition: 'transform 0.2s' }}>{loading ? <Loader2 className="animate-spin" /> : <Play fill="currentColor" size={20} />} {loading ? "Agent is Thinking..." : "Visualize & Analyze"}</button>
         </div>
+      </section>
 
-        {/* RIGHT */}
-        <div className="glass-card" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0px', borderRadius: '16px', padding: '0px' }}>
-           <div style={{ display: 'flex', borderBottom: '1px solid #334155', padding: '10px 20px 0 20px', gap: '5px' }}>
-             <TabButton tabName="Flowchart" /><TabButton tabName="Analysis" /><TabButton tabName="Roast" />
-           </div>
-           <div style={{ flex: 1, padding: '15px 20px 20px 20px', overflow: 'auto' }}>
-             {renderContent()}
+      {/* FEEDBACK & FOOTER */}
+      <section style={{ padding: '60px 20px', background: '#f1f5f9', borderTop: '1px solid #e2e8f0' }}>
+        <div style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'center' }}>
+           <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '10px', color: '#0f172a' }}>Feedback?</h3>
+           <p style={{ color: '#64748b', marginBottom: '20px' }}>Help us make LogicLens smarter. Drop a suggestion!</p>
+           <div style={{ display: 'flex', gap: '10px' }}>
+             <input type="text" value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="Your feedback..." style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }} />
+             <button style={{ padding: '12px 24px', background: '#0f172a', color: 'white', borderRadius: '8px', fontWeight: '600', border: 'none', cursor: 'pointer' }} onClick={handleFeedback}>Send</button>
            </div>
         </div>
-      </div>
+      </section>
 
-      {/* MODAL */}
+      <footer style={{ padding: '30px', background: 'white', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}><p style={{ color: '#64748b', fontSize: '0.9rem' }}>© 2025 LogicLens. Built for WeMakeDevs Hackathon.</p></footer>
+
+      {/* MODAL FIX */}
       {isFullScreen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(10px)', zIndex: 100, display: 'flex', flexDirection: 'column', padding: '20px' }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '10px' }}><button onClick={() => setIsFullScreen(false)} style={{ background: '#334155', border: 'none', color: '#fff', padding: '10px', borderRadius: '50%', cursor: 'pointer' }}><X size={24} /></button></div>
-          <div style={{ flex: 1, overflow: 'auto', background: '#020617', borderRadius: '16px', border: '1px solid #334155', display:'flex', justifyContent:'center', alignItems:'flex-start', padding:'40px' }}><div ref={modalRef} className="mermaid" style={{ width: '100%' }}></div></div>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'white', zIndex: 5000, display: 'flex', flexDirection: 'column' }}>
+           <div style={{ padding: '15px 30px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+              <span style={{ fontWeight: '800', fontSize: '1.2rem', color: '#0f172a' }}>Logic Flowchart</span>
+              <button onClick={() => setIsFullScreen(false)} style={{ background: '#ef4444', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}>Close X</button>
+           </div>
+           <div style={{ flex: 1, overflow: 'auto', padding: '40px', display: 'flex', justifyContent: 'center', alignItems: 'flex-start', background: 'white' }}>
+              <div ref={modalRef} className="mermaid" style={{ minWidth: '100%' }}></div>
+           </div>
         </div>
       )}
     </div>

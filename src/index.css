@@ -1,55 +1,67 @@
-/* src/index.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Base Reset & Colors */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+:root {
+  font-family: 'Inter', system-ui, sans-serif;
+  color-scheme: light;
+}
+
+/* 1. SMOOTH SCROLL (Sourodip's Request) */
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background-color: #020617; /* Ensures dark background */
-  color: #f8fafc; /* Ensures light text */
-  font-family: 'Inter', sans-serif;
-  overflow-x: hidden; /* Prevents horizontal scroll on mobile */
+  margin: 0;
+  color: #0f172a;
+  /* INTERACTIVE BACKGROUND: Dot Grid */
+  background-color: #f8fafc;
+  background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+  background-size: 40px 40px; /* The Grid */
+  animation: bgMove 60s linear infinite; /* Subtle movement */
 }
 
-/* Custom Styles: Glassmorphism Card */
-.glass-card {
-  background: rgba(15, 23, 42, 0.4); /* Slate 900 with transparency */
-  border: 1px solid rgba(56, 189, 248, 0.2); /* Light blue border */
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2), 0 1px 1px rgba(56, 189, 248, 0.1);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-radius: 16px;
-  display: flex;
-  flex-direction: column;
+@keyframes bgMove {
+  0% { background-position: 0 0; }
+  100% { background-position: 40px 40px; }
 }
 
-/* Scrollbar Fixes for Sleek UI */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-::-webkit-scrollbar-track {
-    background: #020617;
-}
-::-webkit-scrollbar-thumb {
-    background: #334155;
-    border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-    background: #475569;
+/* 2. BUTTON ANIMATIONS & BLENDING */
+.btn-primary {
+  background: #0f172a;
+  color: white;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.1), 0 2px 4px -1px rgba(15, 23, 42, 0.06);
+  position: relative;
+  overflow: hidden;
 }
 
-/* Mermaid Diagram Text & Color Fixes */
-.mermaid text { fill: #e2e8f0 !important; font-family: monospace important; }
-.mermaid .node rect, .mermaid .node circle, .mermaid .node polygon { 
-    stroke: #38bdf8 !important; 
-    fill: #1e293b !important; 
-    stroke-width: 2px !important;
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.2);
+  background: #1e293b;
 }
-.mermaid .edgePath .path { stroke: #94a3b8 !important; stroke-width: 2px; }
+
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+/* 3. CARD HOVER EFFECTS */
+.service-card {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px); /* Blending effect */
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  transition: all 0.4s ease;
+}
+
+.service-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border-color: #3b82f6;
+}
+
+/* Mermaid Chart Clean Up */
+.mermaid text { fill: #334155 !important; font-family: monospace !important; }
+.mermaid .node rect { stroke: #0f172a !important; fill: white !important; stroke-width: 2px !important; }
+.mermaid .edgePath .path { stroke: #64748b !important; stroke-width: 2px; }
