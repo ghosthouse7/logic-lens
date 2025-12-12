@@ -65,7 +65,6 @@ function App() {
 
   // --- RENDER MERMAID ---
   const renderMermaid = async () => {
-    // Only render if code exists AND we are on the Flowchart tab (or fullscreen)
     if (diagramCode && (activeTab === 'Flowchart' || isFullScreen)) {
       try {
         await mermaid.parse(diagramCode);
@@ -93,7 +92,6 @@ function App() {
     }
   };
 
-  // ADDED activeTab to dependency: Render happens when tab switches!
   useEffect(() => { 
       const timer = setTimeout(renderMermaid, 200);
       return () => clearTimeout(timer);
@@ -107,9 +105,16 @@ function App() {
     if (!codeToUse.trim()) return alert("Please enter code!")
     
     setLoading(true);
+    if (!codeOverride && !langOverride) setActiveTab('Flowchart'); 
     
     const apiKey = import.meta.env.VITE_GROQ_API_KEY;
     if (!apiKey) { setLoading(false); return alert("Missing API Key!"); }
+
+    // --- PROMPT ENGINEERING FOR BENGALI DADA ---
+    let roastPrompt = `Funny roast in ${langToUse}`;
+    if (langToUse === "Bengali") {
+        roastPrompt = "Roast the user in 'Romanized Bengali' (Banglish) like a strict angry elder brother (Dada). Use words like 'Gadhah', 'Ki likhechish', 'Matha kharap', 'Chup kor'. Be funny but strict.";
+    }
 
     const prompt = `
       Analyze code. Return JSON.
@@ -117,7 +122,7 @@ function App() {
       JSON: {
         "steps": [{"id": "s1", "type": "io", "label": "Read input"}, {"id": "s2", "type": "decision", "label": "n < 0?"}],
         "timeComplexity": "O(n)", "spaceComplexity": "O(1)",
-        "roast": "Funny roast in ${langToUse}",
+        "roast": "${roastPrompt}",
         "hint": "Fix hint", "fixedCode": "Better code"
       }
       CODE: ${codeToUse}
@@ -139,18 +144,18 @@ function App() {
     finally { setLoading(false); }
   }
 
-  // --- FIX: FORCE TAB SWITCH ON AUTO-FIX ---
+  // --- AUTO FIX (With Button State) ---
   const applyFix = () => {
     if (analysis.fixedCode) {
         const fixed = analysis.fixedCode;
         setInputCode(fixed);
         setShowSuccess(true);
-        setTimeout(() => setShowSuccess(false), 3000);
+        setTimeout(() => setShowSuccess(false), 3000); // 3 Seconds "Fixed" state
         
-        // 1. Force Switch to Flowchart Tab so div exists
+        // 1. Force Switch to Flowchart Tab
         setActiveTab('Flowchart'); 
         
-        // 2. Run Analysis
+        // 2. Trigger Analysis for New Code
         handleVisualize(fixed, language); 
     }
   }
@@ -217,8 +222,18 @@ function App() {
         <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
           <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
             <div><h2 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#0f172a' }}>Workspace</h2><p style={{ color: '#64748b' }}>Paste your code below to begin analysis.</p></div>
+            
+            {/* LANGUAGE SELECTOR */}
             <select value={language} onChange={handleLanguageChange} style={{ padding: '10px 15px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontWeight: '600', color: '#334155' }}>
-              <option value="English">English</option><option value="Bengali">Bengali (Strict Dada)</option><option value="Hindi">Hindi (Roaster)</option><option value="GenZ Slang">GenZ Slang</option><option value="Pirate">Pirate Speak</option><option value="Shakespearean">Shakespearean</option><option value="Chinese">Chinese (Sarcastic)</option><option value="Japanese">Japanese (Anime)</option><option value="Spanish">Spanish</option><option value="French">French</option>
+              <option value="English">English</option>
+              <option value="Bengali">Bengali (Strict Dada)</option>
+              <option value="Hindi">Hindi (Roaster)</option>
+              <option value="GenZ Slang">GenZ Slang</option>
+              <option value="Pirate">Pirate Speak</option>
+              <option value="Shakespearean">Shakespearean</option>
+              <option value="Japanese">Japanese (Anime)</option>
+              <option value="Spanish">Spanish</option>
+              <option value="French">French</option>
             </select>
           </div>
 
@@ -252,8 +267,20 @@ function App() {
                       </div>
                       {analysis.fixedCode && (
                         <div style={{ padding: '20px', background: '#fffbeb', borderRadius: '12px', border: '1px solid #fcd34d' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{fontWeight:'700', color:'#b45309'}}>Suggestion</span><button onClick={applyFix} style={{background:'#d97706', color:'white', border:'none', padding:'5px 10px', borderRadius:'6px', cursor:'pointer', fontSize:'0.8rem', fontWeight:'600'}}>Auto-Fix</button></div>
-                          <p style={{ color: '#92400e', fontSize: '0.95rem' }}>{showSuccess ? "Code Updated!" : analysis.hint}</p>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}><span style={{fontWeight:'700', color:'#b45309'}}>Suggestion</span>
+                          
+                          {/* SMART BUTTON - CHANGES ON CLICK */}
+                          <button 
+                            onClick={applyFix} 
+                            disabled={showSuccess}
+                            style={{background: showSuccess ? '#16a34a' : '#d97706', color:'white', border:'none', padding:'5px 12px', borderRadius:'6px', cursor: showSuccess ? 'default' : 'pointer', fontSize:'0.8rem', fontWeight:'600', transition:'all 0.3s', display:'flex', alignItems:'center', gap:'5px'}}
+                          >
+                             {showSuccess ? <CheckCircle2 size={14}/> : <Wand2 size={14}/>} 
+                             {showSuccess ? "Fixed!" : "Auto-Fix"}
+                          </button>
+
+                          </div>
+                          <p style={{ color: '#92400e', fontSize: '0.95rem' }}>{analysis.hint}</p>
                         </div>
                       )}
                    </div>
